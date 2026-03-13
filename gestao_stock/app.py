@@ -6,7 +6,7 @@ import smtplib
 from email.mime.text import MIMEText
 import os
 import cv2
-from pyzbar.pyzbar import decode
+#from pyzbar.pyzbar import decode
 import pytesseract
 from PIL import Image
 import io
@@ -236,4 +236,5 @@ elif pagina == "Exportar Excel":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
+
         st.info("Nada para exportar.")
