@@ -1,8 +1,7 @@
 streamlit
 pandas
 openpyxl
-sqlite3  # já vem no Python
 Pillow
 pytesseract
-opencv-python  # para câmera e pré-processamento de imagem
-pyzbar  # para ler código de barras da webcam
+opencv-python
+pyzbar
