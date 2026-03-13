@@ -3,5 +3,6 @@ pandas
 openpyxl
 Pillow
 pytesseract
-opencv-python
+opencv-python-headless
 pyzbar
+
