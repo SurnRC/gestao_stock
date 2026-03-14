@@ -225,18 +225,6 @@ for idx, campo in enumerate(st.session_state.campos_dinamicos):
         c = conn.cursor()
         data_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         import json
-
-            campos_extra_json = json.dumps({
-                c['nome']: c['valor'] for c in st.session_state.campos_dinamicos
-            })
-            
-            # No INSERT (adiciona no VALUES e na query)
-            c.execute('''
-            INSERT INTO materiais (..., campos_extra)
-            VALUES (..., ?)
-            ''', (..., campos_extra_json))
-        st.success("Item salvo!")
-
         # Salva foto se enviada
         if uploaded_file:
             os.makedirs("imagens", exist_ok=True)
@@ -244,15 +232,21 @@ for idx, campo in enumerate(st.session_state.campos_dinamicos):
             with open(foto_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-        c.execute('''
-        INSERT INTO materiais (categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
-                               quantidade, stock_minimo, largura, m2, medida, data_atualizacao, foto_path)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
-              quantidade, stock_minimo, largura, m2, medida, data_atual, foto_path))
-
-        conn.commit()
-        conn.close()
+        # Campos extras (deve estar alinhado aqui, com 8 espaços no total)
+            campos_extra_json = json.dumps({
+                c['nome']: c['valor'] for c in st.session_state.campos_dinamicos
+            })
+        
+            # INSERT com campos_extra
+            c.execute('''
+            INSERT INTO materiais (categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
+                                   quantidade, stock_minimo, largura, m2, medida, data_atualizacao, foto_path, campos_extra)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
+                  quantidade, stock_minimo, largura, m2, medida, data_atual, foto_path, campos_extra_json))
+        
+            conn.commit()
+            conn.close()
 
         # Verifica alerta
         if quantidade <= stock_minimo and cliente:
