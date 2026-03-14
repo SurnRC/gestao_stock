@@ -219,12 +219,22 @@ for idx, campo in enumerate(st.session_state.campos_dinamicos):
 
 
 
-
     
     if st.button("Salvar Item"):
         conn = get_db_connection()
         c = conn.cursor()
         data_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        import json
+
+            campos_extra_json = json.dumps({
+                c['nome']: c['valor'] for c in st.session_state.campos_dinamicos
+            })
+            
+            # No INSERT (adiciona no VALUES e na query)
+            c.execute('''
+            INSERT INTO materiais (..., campos_extra)
+            VALUES (..., ?)
+            ''', (..., campos_extra_json))
         st.success("Item salvo!")
 
         # Salva foto se enviada
