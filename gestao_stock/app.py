@@ -169,6 +169,26 @@ elif pagina == "Adicionar/Editar":
 
         cap.release()
 
+st.title("Adicionar ou Editar Item")
+
+metodo = st.radio("Como inserir?", ["Manual", "Leitura Código de Barras (Webcam)", "Foto + OCR"])
+
+uploaded_file = None  # ← sempre definido aqui
+
+if metodo == "Foto + OCR":
+    uploaded_file = st.file_uploader("Tire ou envie foto da etiqueta", type=["jpg", "png"])
+    if uploaded_file:
+        # processa foto, OCR, etc.
+
+# ... outros campos ...
+
+if st.button("Salvar Item"):
+    foto_path = None
+    if uploaded_file is not None:
+        # salva foto como antes
+        # ...
+    # insere no banco
+
     if st.button("Salvar Item"):
         conn = get_db_connection()
         c = conn.cursor()
