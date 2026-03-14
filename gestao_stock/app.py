@@ -171,6 +171,56 @@ elif pagina == "Adicionar/Editar":
 
         cap.release()
 
+
+    st.subheader("Campos Personalizados (adicionar extras)")
+
+# Inicializa lista de campos dinâmicos na sessão (se não existir)
+if 'campos_dinamicos' not in st.session_state:
+    st.session_state.campos_dinamicos = []  # lista de dicts: [{'nome': 'Cor', 'tipo': 'text', 'valor': ''}, ...]
+
+# Botão para adicionar novo campo
+col_add_nome, col_add_tipo, col_add_btn = st.columns([3, 2, 1])
+with col_add_nome:
+    novo_nome = st.text_input("Nome do novo campo", key="novo_nome_campo", value="")
+with col_add_tipo:
+    novo_tipo = st.selectbox("Tipo", ["Texto", "Número", "Seleção (lista)"], key="novo_tipo_campo")
+with col_add_btn:
+    if st.button("➕ Adicionar campo") and novo_nome.strip():
+        st.session_state.campos_dinamicos.append({
+            'nome': novo_nome.strip(),
+            'tipo': novo_tipo,
+            'valor': ""  # valor inicial vazio
+        })
+        st.rerun()  # atualiza para mostrar o novo campo
+
+# Mostra e edita os campos dinâmicos
+for idx, campo in enumerate(st.session_state.campos_dinamicos):
+    col_nome, col_input, col_remove = st.columns([2, 5, 1])
+    with col_nome:
+        st.write(f"**{campo['nome']}** ({campo['tipo']})")
+    with col_input:
+        key_input = f"dinamico_{idx}"
+        if campo['tipo'] == "Texto":
+            valor = st.text_input("Valor", value=campo['valor'], key=key_input)
+        elif campo['tipo'] == "Número":
+            valor = st.number_input("Valor", value=float(campo['valor'] or 0), key=key_input)
+        elif campo['tipo'] == "Seleção (lista)":
+            opcoes = st.text_input("Opções (separadas por vírgula)", value="Opção1,Opção2", key=f"opcoes_{idx}")
+            lista_opcoes = [o.strip() for o in opcoes.split(",")]
+            valor = st.selectbox("Selecionar", lista_opcoes, key=key_input)
+        
+        # Atualiza o valor na sessão
+        st.session_state.campos_dinamicos[idx]['valor'] = str(valor) if valor is not None else ""
+    
+    with col_remove:
+        if st.button("🗑️", key=f"remove_{idx}"):
+            del st.session_state.campos_dinamicos[idx]
+            st.rerun()
+
+
+
+
+    
     if st.button("Salvar Item"):
         conn = get_db_connection()
         c = conn.cursor()
