@@ -172,88 +172,47 @@ elif pagina == "Adicionar/Editar":
         cap.release()
 
 
-    st.subheader("Campos Personalizados (adicionar extras)")
+    import json  # coloca este import no topo do ficheiro, não dentro do if
 
-# Inicializa lista de campos dinâmicos na sessão (se não existir)
-if 'campos_dinamicos' not in st.session_state:
-    st.session_state.campos_dinamicos = []  # lista de dicts: [{'nome': 'Cor', 'tipo': 'text', 'valor': ''}, ...]
+# ... (código anterior: campos fixos, campos dinâmicos, etc.)
 
-# Botão para adicionar novo campo
-col_add_nome, col_add_tipo, col_add_btn = st.columns([3, 2, 1])
-with col_add_nome:
-    novo_nome = st.text_input("Nome do novo campo", key="novo_nome_campo", value="")
-with col_add_tipo:
-    novo_tipo = st.selectbox("Tipo", ["Texto", "Número", "Seleção (lista)"], key="novo_tipo_campo")
-with col_add_btn:
-    if st.button("➕ Adicionar campo") and novo_nome.strip():
-        st.session_state.campos_dinamicos.append({
-            'nome': novo_nome.strip(),
-            'tipo': novo_tipo,
-            'valor': ""  # valor inicial vazio
-        })
-        st.rerun()  # atualiza para mostrar o novo campo
+if st.button("Salvar Item"):
+    conn = get_db_connection()
+    c = conn.cursor()
+    data_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-# Mostra e edita os campos dinâmicos
-for idx, campo in enumerate(st.session_state.campos_dinamicos):
-    col_nome, col_input, col_remove = st.columns([2, 5, 1])
-    with col_nome:
-        st.write(f"**{campo['nome']}** ({campo['tipo']})")
-    with col_input:
-        key_input = f"dinamico_{idx}"
-        if campo['tipo'] == "Texto":
-            valor = st.text_input("Valor", value=campo['valor'], key=key_input)
-        elif campo['tipo'] == "Número":
-            valor = st.number_input("Valor", value=float(campo['valor'] or 0), key=key_input)
-        elif campo['tipo'] == "Seleção (lista)":
-            opcoes = st.text_input("Opções (separadas por vírgula)", value="Opção1,Opção2", key=f"opcoes_{idx}")
-            lista_opcoes = [o.strip() for o in opcoes.split(",")]
-            valor = st.selectbox("Selecionar", lista_opcoes, key=key_input)
-        
-        # Atualiza o valor na sessão
-        st.session_state.campos_dinamicos[idx]['valor'] = str(valor) if valor is not None else ""
-    
-    with col_remove:
-        if st.button("🗑️", key=f"remove_{idx}"):
-            del st.session_state.campos_dinamicos[idx]
-            st.rerun()
+    foto_path = None
+    if uploaded_file is not None:
+        os.makedirs("imagens", exist_ok=True)
+        foto_path = f"imagens/{referencia or 'item'}_{datetime.now().strftime('%Y%m%d_%H%M')}.jpg"
+        with open(foto_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
 
+    # Campos extras (guardados como JSON)
+    campos_extra_json = json.dumps({
+        c['nome']: c['valor'] for c in st.session_state.campos_dinamicos
+    })
 
+    # INSERT – atenção aos nomes das colunas e ordem correta
+    c.execute('''
+        INSERT INTO materiais (
+            categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
+            quantidade, stock_minimo, largura, m2, medida, data_atualizacao, foto_path, campos_extra
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
+        quantidade, stock_minimo, largura, m2, medida, data_atual, foto_path, campos_extra_json
+    ))
 
-    
-    if st.button("Salvar Item"):
-        conn = get_db_connection()
-        c = conn.cursor()
-        data_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        import json
-        # Salva foto se enviada
-        if uploaded_file:
-            os.makedirs("imagens", exist_ok=True)
-            foto_path = f"imagens/{referencia or 'item'}_{datetime.now().strftime('%Y%m%d_%H%M')}.jpg"
-            with open(foto_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+    conn.commit()
+    conn.close()
 
-        # Campos extras (deve estar alinhado aqui, com 8 espaços no total)
-            campos_extra_json = json.dumps({
-                c['nome']: c['valor'] for c in st.session_state.campos_dinamicos
-            })
-        
-            # INSERT com campos_extra
-            c.execute('''
-            INSERT INTO materiais (categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
-                                   quantidade, stock_minimo, largura, m2, medida, data_atualizacao, foto_path, campos_extra)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
-                  quantidade, stock_minimo, largura, m2, medida, data_atual, foto_path, campos_extra_json))
-        
-            conn.commit()
-            conn.close()
+    # Verifica alerta de stock baixo
+    if quantidade <= stock_minimo and cliente:
+        enviar_alerta_email("cliente@exemplo.com", referencia or categoria, quantidade)  # ajuste o email real
 
-        # Verifica alerta
-        if quantidade <= stock_minimo and cliente:
-            enviar_alerta_email("cliente@exemplo.com", referencia or categoria, quantidade)  # ajuste email real
-
-        st.success("Item adicionado com sucesso!")
-        st.rerun()  # atualiza dashboard
+    st.success("Item adicionado com sucesso!")
+    st.rerun()  # atualiza o dashboard
 
 elif pagina == "Listar/Remover":
     st.title("Lista de Itens")
