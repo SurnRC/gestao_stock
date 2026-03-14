@@ -108,7 +108,7 @@ elif pagina == "Adicionar/Editar":
 
     metodo = st.radio("Como inserir?", ["Manual", "Leitura Código de Barras (Webcam)", "Foto + OCR"])
 
-    categoria = st.selectbox("Categoria", ["BOBINES", "PALETE", "COLA", "SOBRA", "FILME", "CATCOS", "Outra"])
+    categoria = st.selectbox("Categoria", ["BOBINES", "PALETE", "COLA", "SOBRA", "FILME", "TACOS", "Outra"])
 
     referencia = st.text_input("Referência")
     fornecedor = st.text_input("Fornecedor") if categoria in ["BOBINES"] else ""
@@ -121,7 +121,7 @@ elif pagina == "Adicionar/Editar":
     stock_minimo = st.number_input("Stock Mínimo (para alerta)", min_value=1, value=10)
     largura = st.number_input("Largura", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
     m2 = st.number_input("m²", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
-    medida = st.text_input("Medida (ex: 140/180)") if categoria in ["CATCOS"] else ""
+    medida = st.text_input("Medida (ex: 140/180)") if categoria in ["TACOS"] else ""
 
     foto_path = None
     if metodo == "Foto + OCR":
