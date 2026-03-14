@@ -173,6 +173,7 @@ elif pagina == "Adicionar/Editar":
         conn = get_db_connection()
         c = conn.cursor()
         data_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        st.success("Item salvo!")
 
         # Salva foto se enviada
         if uploaded_file:
