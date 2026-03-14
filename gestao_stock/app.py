@@ -182,13 +182,6 @@ if metodo == "Foto + OCR":
 
 # ... outros campos ...
 
-if st.button("Salvar Item"):
-    foto_path = None
-    if uploaded_file is not None:
-        # salva foto como antes
-        # ...
-    # insere no banco
-
     if st.button("Salvar Item"):
         conn = get_db_connection()
         c = conn.cursor()
