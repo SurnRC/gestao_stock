@@ -108,6 +108,8 @@ elif pagina == "Adicionar/Editar":
 
     metodo = st.radio("Como inserir?", ["Manual", "Leitura Código de Barras (Webcam)", "Foto + OCR"])
 
+    uploaded_file = None
+    
     categoria = st.selectbox("Categoria", ["BOBINES", "PALETE", "COLA", "SOBRA", "FILME", "TACOS", "Outra"])
 
     referencia = st.text_input("Referência")
