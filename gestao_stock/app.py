@@ -11,6 +11,7 @@ import pytesseract
 from PIL import Image
 import io
 import numpy as np
+import json
 
 # Configurações
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # ajuste se necessário
