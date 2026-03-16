@@ -163,30 +163,30 @@ elif pagina == "Adicionar/Editar":
                 ref = texto_ocr[ref_start:ref_start+15].strip()
                 referencia = st.text_input("Referência (do OCR)", value=ref)
                 
-        elif metodo == "Leitura Código de Barras (Webcam)":
-        st.warning("Esta funcionalidade só funciona quando a app está a correr LOCALMENTE (no computador com câmera).")
+        #elif metodo == "Leitura Código de Barras (Webcam)":
+        #st.warning("Esta funcionalidade só funciona quando a app está a correr LOCALMENTE (no computador com câmera).")
         
-        st.write("Aponte a câmera para o código de barras...")
+        #st.write("Aponte a câmera para o código de barras...")
         
-        cap = cv2.VideoCapture(0)
-        frame_placeholder = st.empty()
-        stop_button_pressed = st.button("Parar leitura")
+        #cap = cv2.VideoCapture(0)
+        #frame_placeholder = st.empty()
+        #stop_button_pressed = st.button("Parar leitura")
 
-        while cap.isOpened() and not stop_button_pressed:
-            ret, frame = cap.read()
-            if not ret:
-                st.error("Não foi possível aceder à câmera.")
-                break
+        #while cap.isOpened() and not stop_button_pressed:
+            #ret, frame = cap.read()
+            #if not ret:
+                #st.error("Não foi possível aceder à câmera.")
+                #break
 
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
+            #frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            #frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
 
             # Decodifica barcode (precisa do import from pyzbar.pyzbar import decode)
-            barcodes = decode(frame)
-            if barcodes:
-                barcode_data = barcodes[0].data.decode('utf-8')
-                st.success(f"Código lido: {barcode_data}")
-                referencia = st.text_input("Referência (do barcode)", value=barcode_data)
+            #barcodes = decode(frame)
+            #if barcodes:
+                #barcode_data = barcodes[0].data.decode('utf-8')
+                #st.success(f"Código lido: {barcode_data}")
+                #referencia = st.text_input("Referência (do barcode)", value=barcode_data)
                 # Opcional: break  # para parar após ler o primeiro código
 
         cap.release()
