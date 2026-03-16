@@ -222,7 +222,7 @@ elif pagina == "Adicionar/Editar":
                 ref = texto_ocr[ref_start:ref_start+15].strip()
                 referencia = st.text_input("Referência (do OCR)", value=ref)
 
-    # Câmera do browser (funciona online)
+    # Câmera do browser (recomendado – funciona online)
     elif metodo == "Câmera do browser (recomendado)":
         st.write("Fotografe o código de barras ou etiqueta")
 
@@ -234,19 +234,43 @@ elif pagina == "Adicionar/Editar":
             img = Image.open(io.BytesIO(foto_camera.getvalue()))
             img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-            barcodes = decode(img_cv)
-            if barcodes:
-                barcode_data = barcodes[0].data.decode('utf-8')
-                barcode_type = barcodes[0].type
-                st.success(f"Código lido: **{barcode_data}** (tipo: {barcode_type})")
-                referencia = st.text_input("Referência detectada", value=barcode_data)
-            else:
-                st.warning("Nenhum código de barras encontrado na foto. Tente novamente.")
+            # Leitura de barcode (descomenta quando tiveres pyzbar)
+            # barcodes = decode(img_cv)
+            # if barcodes:
+            #     barcode_data = barcodes[0].data.decode('utf-8')
+            #     st.success(f"Código lido: **{barcode_data}**")
+            #     referencia = st.text_input("Referência detectada", value=barcode_data)
+            # else:
+            #     st.warning("Nenhum código encontrado na foto.")
 
-    #Webcam local (comentada)
+            st.info("Leitura automática ativada quando pyzbar estiver configurado.")
+
+    # Webcam em tempo real (só local – comentada por padrão)
     elif metodo == "Webcam em tempo real (só local)":
-    
+        st.warning("Esta opção só funciona localmente (no computador com webcam).")
 
+        # st.write("Aponte a câmera para o código de barras...")
+        # cap = cv2.VideoCapture(0)
+        # frame_placeholder = st.empty()
+        # stop_button = st.button("Parar leitura")
+        # while cap.isOpened() and not stop_button:
+        #     ret, frame = cap.read()
+        #     if not ret:
+        #         st.error("Não foi possível abrir a câmera.")
+        #         break
+        #     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        #     frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
+        #     barcodes = decode(frame)
+        #     if barcodes:
+        #         barcode_data = barcodes[0].data.decode('utf-8')
+        #         st.success(f"Código lido: {barcode_data}")
+        #         referencia = st.text_input("Referência (do barcode)", value=barcode_data)
+        # cap.release()
+        # frame_placeholder.empty()
+
+    # ────────────────────────────────────────────────
+    # Botão Salvar – deve estar fora dos if/elif metodo, mas dentro da página
+    # ────────────────────────────────────────────────
     if st.button("Salvar Item"):
         conn = get_db_connection()
         c = conn.cursor()
