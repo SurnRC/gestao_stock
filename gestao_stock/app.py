@@ -6,7 +6,7 @@ import smtplib
 from email.mime.text import MIMEText
 import os
 import cv2
-#from pyzbar.pyzbar import decode   # comentado porque precisa de libzbar0 no deploy → descomenta só localmente
+# from pyzbar.pyzbar import decode   # Descomenta APENAS quando fores testar a webcam LOCAL
 import pytesseract
 from PIL import Image
 import io
@@ -14,19 +14,18 @@ import numpy as np
 import json
 
 # ────────────────────────────────────────────────
-#          CONFIGURAÇÕES GLOBAIS
+# CONFIGURAÇÕES GLOBAIS
 # ────────────────────────────────────────────────
 
-# Caminho do Tesseract → ajustar conforme o teu sistema
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # ajuste se necessário
 
 EMAIL_REMETENTE = "seuemail@gmail.com"
-SENHA_APP = "sua-senha-de-app"          # ← Usa senha de aplicativo do Gmail (não a senha normal)
+SENHA_APP = "sua-senha-de-app"          # senha de aplicativo do Gmail
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
 # ────────────────────────────────────────────────
-#          CONEXÃO E INICIALIZAÇÃO DO BANCO
+# CONEXÃO E BANCO
 # ────────────────────────────────────────────────
 
 def get_db_connection():
@@ -55,7 +54,7 @@ def init_db():
         medida TEXT,
         data_atualizacao TEXT,
         foto_path TEXT,
-        campos_extra TEXT          -- JSON com campos personalizados
+        campos_extra TEXT
     )
     ''')
     conn.commit()
@@ -64,7 +63,7 @@ def init_db():
 init_db()
 
 # ────────────────────────────────────────────────
-#          FUNÇÃO DE ENVIO DE EMAIL
+# ENVIO DE EMAIL
 # ────────────────────────────────────────────────
 
 def enviar_alerta_email(cliente_email, item, quantidade):
@@ -86,13 +85,12 @@ def enviar_alerta_email(cliente_email, item, quantidade):
         st.error(f"Erro ao enviar email: {e}")
 
 # ────────────────────────────────────────────────
-#          INTERFACE PRINCIPAL
+# INTERFACE PRINCIPAL
 # ────────────────────────────────────────────────
 
 st.sidebar.title("Gestão de Stock")
 pagina = st.sidebar.radio("Selecione", ["Dashboard", "Adicionar/Editar", "Listar/Remover", "Exportar Excel"])
 
-# Cache dos dados (atualiza a cada 10 segundos)
 @st.cache_data(ttl=10)
 def carregar_dados():
     conn = get_db_connection()
@@ -102,7 +100,6 @@ def carregar_dados():
 
 df = carregar_dados()
 
-# Alerta visual de stock baixo (não envia email aqui)
 if not df.empty:
     baixos = df[df['quantidade'] <= df['stock_minimo']]
     if not baixos.empty:
@@ -110,7 +107,7 @@ if not df.empty:
         st.dataframe(baixos[['categoria', 'referencia', 'cliente', 'quantidade', 'stock_minimo']])
 
 # ────────────────────────────────────────────────
-#          PÁGINAS
+# PÁGINAS
 # ────────────────────────────────────────────────
 
 if pagina == "Dashboard":
@@ -125,73 +122,103 @@ if pagina == "Dashboard":
 elif pagina == "Adicionar/Editar":
     st.title("Adicionar ou Editar Item")
 
-    metodo = st.radio("Como inserir?", ["Manual", "Foto + OCR","Webcam"])  # Tirei webcam por agora (não funciona no cloud)
+    metodo = st.radio("Como inserir?", [
+        "Manual",
+        "Foto + OCR",
+        "Webcam (apenas local)",
+        "Câmera do browser (online)"
+    ])
 
-    # Variável sempre definida → evita NameError
     uploaded_file = None
 
     categoria = st.selectbox("Categoria", ["BOBINES", "PALETE", "COLA", "SOBRA", "FILME", "TACOS", "Outra"])
     referencia = st.text_input("Referência")
     fornecedor = st.text_input("Fornecedor") if categoria in ["BOBINES"] else ""
-    cliente    = st.text_input("Cliente")    if categoria in ["COLA"]     else ""
-    gramas     = st.number_input("Gramas", min_value=0.0, step=0.1)     if categoria in ["BOBINES", "SOBRA"] else 0.0
-    metros     = st.number_input("Metros", min_value=0.0, step=1.0)     if categoria in ["BOBINES"] else 0.0
-    comprimento= st.number_input("Comprimento", min_value=0.0, step=1.0)if categoria in ["BOBINES"] else 0.0
-    peso       = st.number_input("Peso", min_value=0.0, step=0.1)
+    cliente = st.text_input("Cliente") if categoria in ["COLA"] else ""
+    gramas = st.number_input("Gramas", min_value=0.0, step=0.1) if categoria in ["BOBINES", "SOBRA"] else 0.0
+    metros = st.number_input("Metros", min_value=0.0, step=1.0) if categoria in ["BOBINES"] else 0.0
+    comprimento = st.number_input("Comprimento", min_value=0.0, step=1.0) if categoria in ["BOBINES"] else 0.0
+    peso = st.number_input("Peso", min_value=0.0, step=0.1)
     quantidade = st.number_input("Quantidade / Stock Atual", min_value=0, step=1, value=1)
     stock_minimo = st.number_input("Stock Mínimo (para alerta)", min_value=1, value=10)
-    largura    = st.number_input("Largura", min_value=0.0, step=1.0)    if categoria in ["SOBRA"] else 0.0
-    m2         = st.number_input("m²", min_value=0.0, step=1.0)         if categoria in ["SOBRA"] else 0.0
-    medida     = st.text_input("Medida (ex: 140/180)")                  if categoria in ["TACOS"] else ""
+    largura = st.number_input("Largura", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
+    m2 = st.number_input("m²", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
+    medida = st.text_input("Medida (ex: 140/180)") if categoria in ["TACOS"] else ""
 
+    # Foto + OCR
     if metodo == "Foto + OCR":
         uploaded_file = st.file_uploader("Tire ou envie foto da etiqueta", type=["jpg", "png"])
         if uploaded_file:
             img = Image.open(uploaded_file)
             st.image(img, caption="Foto carregada", use_column_width=True)
 
-            # Pré-processamento OCR
             img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
             gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
             _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
             texto_ocr = pytesseract.image_to_string(thresh, lang='por+eng')
             st.text_area("Texto detectado (OCR)", texto_ocr, height=150)
 
-            # Tentativa simples de extrair referência
             if "ref" in texto_ocr.lower():
                 ref_start = texto_ocr.lower().find("ref") + 3
                 ref = texto_ocr[ref_start:ref_start+15].strip()
                 referencia = st.text_input("Referência (do OCR)", value=ref)
-                
-        #elif metodo == "Leitura Código de Barras (Webcam)":
-        #st.warning("Esta funcionalidade só funciona quando a app está a correr LOCALMENTE (no computador com câmera).")
-        
-        #st.write("Aponte a câmera para o código de barras...")
-        
-        #cap = cv2.VideoCapture(0)
-        #frame_placeholder = st.empty()
-        #stop_button_pressed = st.button("Parar leitura")
 
-        #while cap.isOpened() and not stop_button_pressed:
-            #ret, frame = cap.read()
-            #if not ret:
-                #st.error("Não foi possível aceder à câmera.")
-                #break
+    # Webcam local (cv2) ── comentada por padrão
+    # elif metodo == "Webcam (apenas local)":
+    #     st.warning("Funcionalidade SÓ disponível em execução LOCAL (PC com câmera).")
+    #
+    #     st.write("Aponte a câmera para o código de barras...")
+    #
+    #     cap = cv2.VideoCapture(0)
+    #     frame_placeholder = st.empty()
+    #     stop_button_pressed = st.button("Parar leitura")
+    #
+    #     while cap.isOpened() and not stop_button_pressed:
+    #         ret, frame = cap.read()
+    #         if not ret:
+    #             st.error("Não foi possível aceder à câmera.")
+    #             break
+    #
+    #         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    #         frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
+    #
+    #         barcodes = decode(frame)
+    #         if barcodes:
+    #             barcode_data = barcodes[0].data.decode('utf-8')
+    #             st.success(f"Código lido: {barcode_data}")
+    #             referencia = st.text_input("Referência (do barcode)", value=barcode_data)
+    #             # break  # opcional: para após ler o primeiro
+    #
+    #     cap.release()
+    #     frame_placeholder.empty()
 
-            #frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            #frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
+    # Câmera do browser (funciona online)
+    elif metodo == "Câmera do browser (online)":
+        st.write("Tire uma foto do código de barras com a câmera do seu telemóvel ou computador")
 
-            # Decodifica barcode (precisa do import from pyzbar.pyzbar import decode)
-            #barcodes = decode(frame)
-            #if barcodes:
-                #barcode_data = barcodes[0].data.decode('utf-8')
-                #st.success(f"Código lido: {barcode_data}")
-                #referencia = st.text_input("Referência (do barcode)", value=barcode_data)
-                # Opcional: break  # para parar após ler o primeiro código
+        foto_camera = st.camera_input("Fotografe o código de barras")
 
-        cap.release()
-        frame_placeholder.empty()
-    # Botão de salvar – só executa quando clicado
+        if foto_camera is not None:
+            st.image(foto_camera, caption="Foto tirada", use_column_width=True)
+
+            # Processar a foto
+            img = Image.open(io.BytesIO(foto_camera.getvalue()))
+            img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
+            # Tentar ler código de barras (precisa pyzbar descomentado)
+            # barcodes = decode(img_cv)
+            # if barcodes:
+            #     barcode_data = barcodes[0].data.decode('utf-8')
+            #     st.success(f"Código lido: {barcode_data}")
+            #     referencia = st.text_input("Referência detectada", value=barcode_data)
+            # else:
+            #     st.warning("Nenhum código de barras encontrado. Tente outra foto.")
+
+            # Por agora só mostra a foto (descomenta acima quando tiveres pyzbar pronto)
+
+    # ────────────────────────────────────────────────
+    # SALVAR ITEM
+    # ────────────────────────────────────────────────
     if st.button("Salvar Item"):
         conn = get_db_connection()
         c = conn.cursor()
@@ -204,10 +231,8 @@ elif pagina == "Adicionar/Editar":
             with open(foto_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-        # Campos extras (se quiseres implementar depois)
-        campos_extra_json = json.dumps({})  # por agora vazio – podes expandir depois
+        campos_extra_json = json.dumps({})
 
-        # INSERT no banco
         c.execute('''
             INSERT INTO materiais (
                 categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
@@ -221,25 +246,26 @@ elif pagina == "Adicionar/Editar":
         conn.commit()
         conn.close()
 
-        # Alerta de stock baixo
         if quantidade <= stock_minimo and cliente:
             enviar_alerta_email("cliente@exemplo.com", referencia or categoria, quantidade)
 
         st.success("Item adicionado com sucesso!")
         st.rerun()
 
+# ────────────────────────────────────────────────
+# OUTRAS PÁGINAS (mantidas iguais)
+# ────────────────────────────────────────────────
+
 elif pagina == "Listar/Remover":
     st.title("Lista de Itens")
     if not df.empty:
         edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-
         if st.button("Salvar Alterações"):
             conn = get_db_connection()
             edited_df.to_sql("materiais", conn, if_exists="replace", index=False)
             conn.close()
             st.success("Alterações salvas!")
             st.rerun()
-
         id_remover = st.number_input("ID do item a remover", min_value=1, step=1)
         if st.button("Remover Item"):
             conn = get_db_connection()
