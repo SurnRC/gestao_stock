@@ -6,27 +6,34 @@ import smtplib
 from email.mime.text import MIMEText
 import os
 import cv2
-#from pyzbar.pyzbar import decode
+# from pyzbar.pyzbar import decode   # comentado porque precisa de libzbar0 no deploy → descomenta só localmente
 import pytesseract
 from PIL import Image
 import io
 import numpy as np
 import json
 
-# Configurações
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # ajuste se necessário
+# ────────────────────────────────────────────────
+#          CONFIGURAÇÕES GLOBAIS
+# ────────────────────────────────────────────────
+
+# Caminho do Tesseract → ajustar conforme o teu sistema
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
 EMAIL_REMETENTE = "seuemail@gmail.com"
-SENHA_APP = "sua-senha-de-app"  # use senha de app do Gmail
+SENHA_APP = "sua-senha-de-app"          # ← Usa senha de aplicativo do Gmail (não a senha normal)
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-# Conexão com SQLite
+# ────────────────────────────────────────────────
+#          CONEXÃO E INICIALIZAÇÃO DO BANCO
+# ────────────────────────────────────────────────
+
 def get_db_connection():
     conn = sqlite3.connect('stock.db')
     conn.row_factory = sqlite3.Row
     return conn
 
-# Inicializa banco se não existir
 def init_db():
     conn = get_db_connection()
     c = conn.cursor()
@@ -47,7 +54,8 @@ def init_db():
         m2 REAL,
         medida TEXT,
         data_atualizacao TEXT,
-        foto_path TEXT
+        foto_path TEXT,
+        campos_extra TEXT          -- JSON com campos personalizados
     )
     ''')
     conn.commit()
@@ -55,7 +63,10 @@ def init_db():
 
 init_db()
 
-# Função para enviar email de alerta
+# ────────────────────────────────────────────────
+#          FUNÇÃO DE ENVIO DE EMAIL
+# ────────────────────────────────────────────────
+
 def enviar_alerta_email(cliente_email, item, quantidade):
     if not cliente_email:
         return
@@ -70,15 +81,18 @@ def enviar_alerta_email(cliente_email, item, quantidade):
         server.login(EMAIL_REMETENTE, SENHA_APP)
         server.send_message(msg)
         server.quit()
-        st.success(f"Email de alerta enviado para {cliente_email}")
+        st.success(f"Email enviado para {cliente_email}")
     except Exception as e:
         st.error(f"Erro ao enviar email: {e}")
 
-# Sidebar para navegação
+# ────────────────────────────────────────────────
+#          INTERFACE PRINCIPAL
+# ────────────────────────────────────────────────
+
 st.sidebar.title("Gestão de Stock")
 pagina = st.sidebar.radio("Selecione", ["Dashboard", "Adicionar/Editar", "Listar/Remover", "Exportar Excel"])
 
-# Função para carregar dados
+# Cache dos dados (atualiza a cada 10 segundos)
 @st.cache_data(ttl=10)
 def carregar_dados():
     conn = get_db_connection()
@@ -88,12 +102,16 @@ def carregar_dados():
 
 df = carregar_dados()
 
-# Verifica stock baixo e alerta (só mostra, email envia ao adicionar/editar)
+# Alerta visual de stock baixo (não envia email aqui)
 if not df.empty:
     baixos = df[df['quantidade'] <= df['stock_minimo']]
     if not baixos.empty:
         st.warning("Itens com stock baixo!")
         st.dataframe(baixos[['categoria', 'referencia', 'cliente', 'quantidade', 'stock_minimo']])
+
+# ────────────────────────────────────────────────
+#          PÁGINAS
+# ────────────────────────────────────────────────
 
 if pagina == "Dashboard":
     st.title("Dashboard de Stock")
@@ -107,111 +125,80 @@ if pagina == "Dashboard":
 elif pagina == "Adicionar/Editar":
     st.title("Adicionar ou Editar Item")
 
-    metodo = st.radio("Como inserir?", ["Manual", "Leitura Código de Barras (Webcam)", "Foto + OCR"])
+    metodo = st.radio("Como inserir?", ["Manual", "Foto + OCR"])  # Tirei webcam por agora (não funciona no cloud)
 
+    # Variável sempre definida → evita NameError
     uploaded_file = None
-    
-    categoria = st.selectbox("Categoria", ["BOBINES", "PALETE", "COLA", "SOBRA", "FILME", "TACOS", "Outra"])
 
+    categoria = st.selectbox("Categoria", ["BOBINES", "PALETE", "COLA", "SOBRA", "FILME", "TACOS", "Outra"])
     referencia = st.text_input("Referência")
     fornecedor = st.text_input("Fornecedor") if categoria in ["BOBINES"] else ""
-    cliente = st.text_input("Cliente") if categoria in ["COLA"] else ""
-    gramas = st.number_input("Gramas", min_value=0.0, step=0.1) if categoria in ["BOBINES", "SOBRA"] else 0.0
-    metros = st.number_input("Metros", min_value=0.0, step=1.0) if categoria in ["BOBINES"] else 0.0
-    comprimento = st.number_input("Comprimento", min_value=0.0, step=1.0) if categoria in ["BOBINES"] else 0.0
-    peso = st.number_input("Peso", min_value=0.0, step=0.1)
+    cliente    = st.text_input("Cliente")    if categoria in ["COLA"]     else ""
+    gramas     = st.number_input("Gramas", min_value=0.0, step=0.1)     if categoria in ["BOBINES", "SOBRA"] else 0.0
+    metros     = st.number_input("Metros", min_value=0.0, step=1.0)     if categoria in ["BOBINES"] else 0.0
+    comprimento= st.number_input("Comprimento", min_value=0.0, step=1.0)if categoria in ["BOBINES"] else 0.0
+    peso       = st.number_input("Peso", min_value=0.0, step=0.1)
     quantidade = st.number_input("Quantidade / Stock Atual", min_value=0, step=1, value=1)
     stock_minimo = st.number_input("Stock Mínimo (para alerta)", min_value=1, value=10)
-    largura = st.number_input("Largura", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
-    m2 = st.number_input("m²", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
-    medida = st.text_input("Medida (ex: 140/180)") if categoria in ["TACOS"] else ""
+    largura    = st.number_input("Largura", min_value=0.0, step=1.0)    if categoria in ["SOBRA"] else 0.0
+    m2         = st.number_input("m²", min_value=0.0, step=1.0)         if categoria in ["SOBRA"] else 0.0
+    medida     = st.text_input("Medida (ex: 140/180)")                  if categoria in ["TACOS"] else ""
 
-    foto_path = None
     if metodo == "Foto + OCR":
         uploaded_file = st.file_uploader("Tire ou envie foto da etiqueta", type=["jpg", "png"])
         if uploaded_file:
             img = Image.open(uploaded_file)
             st.image(img, caption="Foto carregada", use_column_width=True)
 
-            # Pré-processamento simples
+            # Pré-processamento OCR
             img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
             gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
             _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-
-            texto_ocr = pytesseract.image_to_string(thresh, lang='por+eng')  # português + inglês
+            texto_ocr = pytesseract.image_to_string(thresh, lang='por+eng')
             st.text_area("Texto detectado (OCR)", texto_ocr, height=150)
 
-            # Tenta preencher campos automaticamente (melhore conforme suas etiquetas)
+            # Tentativa simples de extrair referência
             if "ref" in texto_ocr.lower():
                 ref_start = texto_ocr.lower().find("ref") + 3
                 ref = texto_ocr[ref_start:ref_start+15].strip()
                 referencia = st.text_input("Referência (do OCR)", value=ref)
 
-    elif metodo == "Leitura Código de Barras (Webcam)":
-        st.write("Aponte a câmera para o código de barras...")
-        cap = cv2.VideoCapture(0)
-        frame_placeholder = st.empty()
-        stop_button = st.button("Parar leitura")
+    # Botão de salvar – só executa quando clicado
+    if st.button("Salvar Item"):
+        conn = get_db_connection()
+        c = conn.cursor()
+        data_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        while cap.isOpened() and not stop_button:
-            ret, frame = cap.read()
-            if not ret:
-                break
+        foto_path = None
+        if uploaded_file is not None:
+            os.makedirs("imagens", exist_ok=True)
+            foto_path = f"imagens/{referencia or 'item'}_{datetime.now().strftime('%Y%m%d_%H%M')}.jpg"
+            with open(foto_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
 
-            # Mostra frame
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_placeholder.image(frame_rgb, channels="RGB")
+        # Campos extras (se quiseres implementar depois)
+        campos_extra_json = json.dumps({})  # por agora vazio – podes expandir depois
 
-            # Decodifica barcode
-            barcodes = decode(frame)
-            if barcodes:
-                barcode_data = barcodes[0].data.decode('utf-8')
-                st.success(f"Código lido: {barcode_data}")
-                referencia = st.text_input("Referência (do barcode)", value=barcode_data)
-                break
-        st.button("Salvar Item"):
-        cap.release()
-
-
-    import json  # coloca este import no topo do ficheiro, não dentro do if
-
-# ... (código anterior: campos fixos, campos dinâmicos, etc.)
-    conn = get_db_connection()
-    c = conn.cursor()
-    data_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    foto_path = None
-    if uploaded_file is not None:
-        os.makedirs("imagens", exist_ok=True)
-        foto_path = f"imagens/{referencia or 'item'}_{datetime.now().strftime('%Y%m%d_%H%M')}.jpg"
-        with open(foto_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-
-    # Campos extras (guardados como JSON)
-    campos_extra_json = json.dumps({
-        c['nome']: c['valor'] for c in st.session_state.campos_dinamicos
-    })
-
-    # INSERT – atenção aos nomes das colunas e ordem correta
-    c.execute('''
-        INSERT INTO materiais (
+        # INSERT no banco
+        c.execute('''
+            INSERT INTO materiais (
+                categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
+                quantidade, stock_minimo, largura, m2, medida, data_atualizacao, foto_path, campos_extra
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
             categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
-            quantidade, stock_minimo, largura, m2, medida, data_atualizacao, foto_path, campos_extra
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
-        quantidade, stock_minimo, largura, m2, medida, data_atual, foto_path, campos_extra_json
-    ))
+            quantidade, stock_minimo, largura, m2, medida, data_atual, foto_path, campos_extra_json
+        ))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+        conn.close()
 
-    # Verifica alerta de stock baixo
-    if quantidade <= stock_minimo and cliente:
-        enviar_alerta_email("cliente@exemplo.com", referencia or categoria, quantidade)  # ajuste o email real
+        # Alerta de stock baixo
+        if quantidade <= stock_minimo and cliente:
+            enviar_alerta_email("cliente@exemplo.com", referencia or categoria, quantidade)
 
-    st.success("Item adicionado com sucesso!")
-    st.rerun()  # atualiza o dashboard
+        st.success("Item adicionado com sucesso!")
+        st.rerun()
 
 elif pagina == "Listar/Remover":
     st.title("Lista de Itens")
@@ -225,7 +212,7 @@ elif pagina == "Listar/Remover":
             st.success("Alterações salvas!")
             st.rerun()
 
-        id_remover = st.number_input("ID do item a remover", min_value=1)
+        id_remover = st.number_input("ID do item a remover", min_value=1, step=1)
         if st.button("Remover Item"):
             conn = get_db_connection()
             c = conn.cursor()
@@ -251,5 +238,4 @@ elif pagina == "Exportar Excel":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
-
         st.info("Nada para exportar.")
