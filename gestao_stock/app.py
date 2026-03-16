@@ -176,8 +176,6 @@ elif pagina == "Adicionar/Editar":
     import json  # coloca este import no topo do ficheiro, não dentro do if
 
 # ... (código anterior: campos fixos, campos dinâmicos, etc.)
-
-if st.button("Salvar Item"):
     conn = get_db_connection()
     c = conn.cursor()
     data_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
