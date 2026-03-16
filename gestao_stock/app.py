@@ -181,27 +181,23 @@ elif pagina == "Adicionar/Editar":
     metodo = st.radio("Como inserir?", [
         "Manual",
         "Foto + OCR",
-        "Webcam (apenas local)",
-        "Câmera do browser (online)"
+        "Câmera do browser (recomendado – online)",
+        "Webcam em tempo real (só local)"
     ])
 
     uploaded_file = None
+    referencia = st.text_input("Referência")   # valor será preenchido automaticamente se lido
 
+    # Campos existentes (mantém os teus)
     categoria = st.selectbox("Categoria", ["BOBINES", "PALETE", "COLA", "SOBRA", "FILME", "TACOS", "Outra"])
-    referencia = st.text_input("Referência")
     fornecedor = st.text_input("Fornecedor") if categoria in ["BOBINES"] else ""
     cliente = st.text_input("Cliente") if categoria in ["COLA"] else ""
     gramas = st.number_input("Gramas", min_value=0.0, step=0.1) if categoria in ["BOBINES", "SOBRA"] else 0.0
-    metros = st.number_input("Metros", min_value=0.0, step=1.0) if categoria in ["BOBINES"] else 0.0
-    comprimento = st.number_input("Comprimento", min_value=0.0, step=1.0) if categoria in ["BOBINES"] else 0.0
-    peso = st.number_input("Peso", min_value=0.0, step=0.1)
-    quantidade = st.number_input("Quantidade / Stock Atual", min_value=0, step=1, value=1)
-    stock_minimo = st.number_input("Stock Mínimo (para alerta)", min_value=1, value=10)
-    largura = st.number_input("Largura", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
-    m2 = st.number_input("m²", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
-    medida = st.text_input("Medida (ex: 140/180)") if categoria in ["TACOS"] else ""
+    # ... (mantém todos os outros campos que já tinhas)
 
-    # Foto + OCR
+    # ────────────────────────────────────────────────
+    # 1. Foto + OCR (já tinhas)
+    # ────────────────────────────────────────────────
     if metodo == "Foto + OCR":
         uploaded_file = st.file_uploader("Tire ou envie foto da etiqueta", type=["jpg", "png"])
         if uploaded_file:
@@ -214,60 +210,74 @@ elif pagina == "Adicionar/Editar":
             texto_ocr = pytesseract.image_to_string(thresh, lang='por+eng')
             st.text_area("Texto detectado (OCR)", texto_ocr, height=150)
 
+            # Tentativa de extrair referência
             if "ref" in texto_ocr.lower():
                 ref_start = texto_ocr.lower().find("ref") + 3
                 ref = texto_ocr[ref_start:ref_start+15].strip()
                 referencia = st.text_input("Referência (do OCR)", value=ref)
 
-    # Webcam local (cv2) ── comentada por padrão
-    # elif metodo == "Webcam (apenas local)":
-    #     st.warning("Funcionalidade SÓ disponível em execução LOCAL (PC com câmera).")
-    #
-    #     st.write("Aponte a câmera para o código de barras...")
-    #
-    #     cap = cv2.VideoCapture(0)
-    #     frame_placeholder = st.empty()
-    #     stop_button_pressed = st.button("Parar leitura")
-    #
-    #     while cap.isOpened() and not stop_button_pressed:
-    #         ret, frame = cap.read()
-    #         if not ret:
-    #             st.error("Não foi possível aceder à câmera.")
-    #             break
-    #
-    #         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    #         frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
-    #
-    #         barcodes = decode(frame)
-    #         if barcodes:
-    #             barcode_data = barcodes[0].data.decode('utf-8')
-    #             st.success(f"Código lido: {barcode_data}")
-    #             referencia = st.text_input("Referência (do barcode)", value=barcode_data)
-    #
-    #     cap.release()
-    #     frame_placeholder.empty()
+    # ────────────────────────────────────────────────
+    # 2. Câmera do browser – leitura de barcode (funciona online)
+    # ────────────────────────────────────────────────
+    elif metodo == "Câmera do browser (recomendado – online)":
+        st.write("Fotografe o código de barras com a câmera do telemóvel ou computador")
 
-    # Câmera do browser (funciona online)
-    elif metodo == "Câmera do browser (online)":
-        st.write("Tire uma foto do código de barras com a câmera do seu telemóvel ou computador")
-
-        foto_camera = st.camera_input("Fotografe o código de barras")
+        foto_camera = st.camera_input("Tire foto do código de barras")
 
         if foto_camera is not None:
             st.image(foto_camera, caption="Foto tirada", use_column_width=True)
 
-            # Processar a foto (opcional: descomentar quando tiveres pyzbar)
+            # Converter para formato que pyzbar entende
             img = Image.open(io.BytesIO(foto_camera.getvalue()))
-            img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-            # barcodes = decode(img_cv)
+            img_array = np.array(img)
+
+            # Aqui usamos pyzbar (descomenta o import lá em cima se quiseres usar)
+            # barcodes = decode(img_array)
+            # if barcodes:
+            #     barcode_data = barcodes[0].data.decode('utf-8')
+            #     st.success(f"Código lido: **{barcode_data}**")
+            #     referencia = st.text_input("Referência detectada", value=barcode_data)
+            # else:
+            #     st.warning("Nenhum código de barras encontrado na foto. Tente novamente.")
+
+            st.info("Leitura automática de barcode ativada quando tiveres pyzbar instalado e import descomentado.")
+
+    # ────────────────────────────────────────────────
+    # 3. Webcam em tempo real – OpenCV + pyzbar (só local)
+    # ────────────────────────────────────────────────
+    elif metodo == "Webcam em tempo real (só local)":
+        st.warning("Esta opção **só funciona localmente** (no computador com webcam). Não funciona no deploy online.")
+
+        st.write("Aponte a câmera para o código de barras...")
+
+        cap = cv2.VideoCapture(0)
+        frame_placeholder = st.empty()
+        stop_button = st.button("Parar leitura")
+
+        while cap.isOpened() and not stop_button:
+            ret, frame = cap.read()
+            if not ret:
+                st.error("Não foi possível abrir a câmera.")
+                break
+
+            # Mostrar frame
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
+
+            # Ler barcode (precisa pyzbar)
+            # barcodes = decode(frame)
             # if barcodes:
             #     barcode_data = barcodes[0].data.decode('utf-8')
             #     st.success(f"Código lido: {barcode_data}")
-            #     referencia = st.text_input("Referência detectada", value=barcode_data)
-            # else:
-            #     st.warning("Nenhum código de barras encontrado.")
+            #     referencia = st.text_input("Referência (do barcode)", value=barcode_data)
+            #     break  # ou continua se quiseres ler vários
 
-    # Botão Salvar Item
+        cap.release()
+        frame_placeholder.empty()
+
+    # ────────────────────────────────────────────────
+    # Botão Salvar (igual ao que já tinhas)
+    # ────────────────────────────────────────────────
     if st.button("Salvar Item"):
         conn = get_db_connection()
         c = conn.cursor()
@@ -300,7 +310,6 @@ elif pagina == "Adicionar/Editar":
 
         st.success("Item adicionado com sucesso!")
         st.rerun()
-
 elif pagina == "Listar/Remover":
     st.title("Lista de Itens")
     if not df.empty:
