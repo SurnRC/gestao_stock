@@ -234,14 +234,14 @@ elif pagina == "Adicionar/Editar":
             img = Image.open(io.BytesIO(foto_camera.getvalue()))
             img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-            #Leitura de barcode (descomenta quando tiveres pyzbar)
             barcodes = decode(img_cv)
             if barcodes:
                 barcode_data = barcodes[0].data.decode('utf-8')
-                 st.success(f"Código lido: {barcode_data}")
+                barcode_type = barcodes[0].type
+                st.success(f"Código lido: **{barcode_data}** (tipo: {barcode_type})")
                 referencia = st.text_input("Referência detectada", value=barcode_data)
             else:
-                   st.warning("Nenhum código encontrado na foto.")
+                st.warning("Nenhum código de barras encontrado na foto. Tente novamente.")
 
     #Webcam local (comentada)
     elif metodo == "Webcam em tempo real (só local)":
