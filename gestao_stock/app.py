@@ -169,7 +169,7 @@ elif pagina == "Adicionar/Editar":
                 st.success(f"Código lido: {barcode_data}")
                 referencia = st.text_input("Referência (do barcode)", value=barcode_data)
                 break
-
+        st.button("Salvar Item"):
         cap.release()
 
 
