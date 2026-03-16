@@ -5,4 +5,4 @@ Pillow
 pytesseract
 opencv-python-headless
 pyzbar
-
+openai
