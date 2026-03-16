@@ -6,29 +6,35 @@ import smtplib
 from email.mime.text import MIMEText
 import os
 import cv2
-# from pyzbar.pyzbar import decode   # Descomenta só para usar Webcam local
+# from pyzbar.pyzbar import decode  # Descomenta APENAS quando fores testar a webcam LOCAL
 import pytesseract
 from PIL import Image
 import io
 import numpy as np
 import json
-import openai   # para o Grok
+import openai  # para o Grok
 
-# ========================= CONFIGURAÇÕES =========================
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# ────────────────────────────────────────────────
+# CONFIGURAÇÕES GLOBAIS
+# ────────────────────────────────────────────────
+
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # ajuste se necessário
 
 EMAIL_REMETENTE = "seuemail@gmail.com"
-SENHA_APP = "sua-senha-de-app"
+SENHA_APP = "sua-senha-de-app"          # senha de aplicativo do Gmail
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-# Configuração Grok (xAI) - coloca a chave em Secrets do Streamlit Cloud
+# Configuração Grok (xAI) - guarda a chave real em st.secrets
 client = openai.OpenAI(
     api_key=st.secrets.get("XAI_API_KEY", "coloque_aqui_sua_chave"),
     base_url="https://api.x.ai/v1"
 )
 
-# ========================= BANCO DE DADOS =========================
+# ────────────────────────────────────────────────
+# CONEXÃO E BANCO DE DADOS
+# ────────────────────────────────────────────────
+
 def get_db_connection():
     conn = sqlite3.connect('stock.db')
     conn.row_factory = sqlite3.Row
@@ -61,7 +67,7 @@ def init_db():
     )
     ''')
     
-    # Nova tabela: Lembretes / Tarefas
+    # Tabela lembretes / tarefas
     c.execute('''
     CREATE TABLE IF NOT EXISTS lembretes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,10 +86,27 @@ def init_db():
 
 init_db()
 
-# ========================= FUNÇÕES =========================
+# ────────────────────────────────────────────────
+# FUNÇÕES AUXILIARES
+# ────────────────────────────────────────────────
+
 def enviar_alerta_email(cliente_email, item, quantidade):
-    # (mantida igual à versão anterior)
-    pass  # substitui pelo teu código anterior de email se quiseres
+    if not cliente_email:
+        return
+    msg = MIMEText(f"Alerta: Stock baixo do item {item}!\nQuantidade atual: {quantidade}\nPor favor, verifique.")
+    msg['Subject'] = f"Alerta de Stock Baixo - {item}"
+    msg['From'] = EMAIL_REMETENTE
+    msg['To'] = cliente_email
+
+    try:
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(EMAIL_REMETENTE, SENHA_APP)
+        server.send_message(msg)
+        server.quit()
+        st.success(f"Email enviado para {cliente_email}")
+    except Exception as e:
+        st.error(f"Erro ao enviar email: {e}")
 
 @st.cache_data(ttl=10)
 def carregar_dados():
@@ -109,13 +132,16 @@ def chamar_ia(pergunta, df):
     )
     return response.choices[0].message.content
 
-# ========================= INTERFACE =========================
+# ────────────────────────────────────────────────
+# INTERFACE PRINCIPAL
+# ────────────────────────────────────────────────
+
 st.sidebar.title("📦 Gestão de Stock")
 pagina = st.sidebar.radio("Selecione", [
-    "Dashboard", 
-    "Adicionar/Editar", 
-    "Listar/Remover", 
-    "Exportar Excel", 
+    "Dashboard",
+    "Adicionar/Editar",
+    "Listar/Remover",
+    "Exportar Excel",
     "Calendário & Lembretes",
     "🤖 Assistente IA"
 ])
@@ -129,7 +155,9 @@ if not df.empty:
         st.warning("⚠️ Itens com stock baixo!")
         st.dataframe(baixos[['categoria', 'referencia', 'quantidade', 'stock_minimo']])
 
-# ========================= PÁGINAS =========================
+# ────────────────────────────────────────────────
+# PÁGINAS
+# ────────────────────────────────────────────────
 
 if pagina == "Dashboard":
     st.title("Dashboard de Stock")
@@ -148,22 +176,169 @@ if pagina == "Dashboard":
         st.dataframe(lembretes_hoje[['titulo', 'data', 'hora', 'prioridade']])
 
 elif pagina == "Adicionar/Editar":
-    # (todo o código anterior com as 4 opções de inserção: Manual, Foto+OCR, Webcam local comentada, Câmera browser)
-    # Mantive exatamente como na última versão que te enviei
     st.title("Adicionar ou Editar Item")
-    metodo = st.radio("Como inserir?", ["Manual", "Foto + OCR", "Webcam (apenas local)", "Câmera do browser (online)"])
-    uploaded_file = None
-    # ... (todo o resto do bloco Adicionar/Editar que já tinhas, incluindo as duas câmeras) ...
 
-    # (cola aqui o bloco completo do Adicionar/Editar da minha resposta anterior se quiseres, ou avisa que envio só essa parte)
+    metodo = st.radio("Como inserir?", [
+        "Manual",
+        "Foto + OCR",
+        "Webcam (apenas local)",
+        "Câmera do browser (online)"
+    ])
+
+    uploaded_file = None
+
+    categoria = st.selectbox("Categoria", ["BOBINES", "PALETE", "COLA", "SOBRA", "FILME", "TACOS", "Outra"])
+    referencia = st.text_input("Referência")
+    fornecedor = st.text_input("Fornecedor") if categoria in ["BOBINES"] else ""
+    cliente = st.text_input("Cliente") if categoria in ["COLA"] else ""
+    gramas = st.number_input("Gramas", min_value=0.0, step=0.1) if categoria in ["BOBINES", "SOBRA"] else 0.0
+    metros = st.number_input("Metros", min_value=0.0, step=1.0) if categoria in ["BOBINES"] else 0.0
+    comprimento = st.number_input("Comprimento", min_value=0.0, step=1.0) if categoria in ["BOBINES"] else 0.0
+    peso = st.number_input("Peso", min_value=0.0, step=0.1)
+    quantidade = st.number_input("Quantidade / Stock Atual", min_value=0, step=1, value=1)
+    stock_minimo = st.number_input("Stock Mínimo (para alerta)", min_value=1, value=10)
+    largura = st.number_input("Largura", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
+    m2 = st.number_input("m²", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
+    medida = st.text_input("Medida (ex: 140/180)") if categoria in ["TACOS"] else ""
+
+    # Foto + OCR
+    if metodo == "Foto + OCR":
+        uploaded_file = st.file_uploader("Tire ou envie foto da etiqueta", type=["jpg", "png"])
+        if uploaded_file:
+            img = Image.open(uploaded_file)
+            st.image(img, caption="Foto carregada", use_column_width=True)
+
+            img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+            gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+            _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+            texto_ocr = pytesseract.image_to_string(thresh, lang='por+eng')
+            st.text_area("Texto detectado (OCR)", texto_ocr, height=150)
+
+            if "ref" in texto_ocr.lower():
+                ref_start = texto_ocr.lower().find("ref") + 3
+                ref = texto_ocr[ref_start:ref_start+15].strip()
+                referencia = st.text_input("Referência (do OCR)", value=ref)
+
+    # Webcam local (cv2) ── comentada por padrão
+    # elif metodo == "Webcam (apenas local)":
+    #     st.warning("Funcionalidade SÓ disponível em execução LOCAL (PC com câmera).")
+    #
+    #     st.write("Aponte a câmera para o código de barras...")
+    #
+    #     cap = cv2.VideoCapture(0)
+    #     frame_placeholder = st.empty()
+    #     stop_button_pressed = st.button("Parar leitura")
+    #
+    #     while cap.isOpened() and not stop_button_pressed:
+    #         ret, frame = cap.read()
+    #         if not ret:
+    #             st.error("Não foi possível aceder à câmera.")
+    #             break
+    #
+    #         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    #         frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
+    #
+    #         barcodes = decode(frame)
+    #         if barcodes:
+    #             barcode_data = barcodes[0].data.decode('utf-8')
+    #             st.success(f"Código lido: {barcode_data}")
+    #             referencia = st.text_input("Referência (do barcode)", value=barcode_data)
+    #
+    #     cap.release()
+    #     frame_placeholder.empty()
+
+    # Câmera do browser (funciona online)
+    elif metodo == "Câmera do browser (online)":
+        st.write("Tire uma foto do código de barras com a câmera do seu telemóvel ou computador")
+
+        foto_camera = st.camera_input("Fotografe o código de barras")
+
+        if foto_camera is not None:
+            st.image(foto_camera, caption="Foto tirada", use_column_width=True)
+
+            # Processar a foto (opcional: descomentar quando tiveres pyzbar)
+            img = Image.open(io.BytesIO(foto_camera.getvalue()))
+            img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+            # barcodes = decode(img_cv)
+            # if barcodes:
+            #     barcode_data = barcodes[0].data.decode('utf-8')
+            #     st.success(f"Código lido: {barcode_data}")
+            #     referencia = st.text_input("Referência detectada", value=barcode_data)
+            # else:
+            #     st.warning("Nenhum código de barras encontrado.")
+
+    # Botão Salvar Item
+    if st.button("Salvar Item"):
+        conn = get_db_connection()
+        c = conn.cursor()
+        data_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        foto_path = None
+        if uploaded_file is not None:
+            os.makedirs("imagens", exist_ok=True)
+            foto_path = f"imagens/{referencia or 'item'}_{datetime.now().strftime('%Y%m%d_%H%M')}.jpg"
+            with open(foto_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+
+        campos_extra_json = json.dumps({})
+
+        c.execute('''
+            INSERT INTO materiais (
+                categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
+                quantidade, stock_minimo, largura, m2, medida, data_atualizacao, foto_path, campos_extra
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            categoria, referencia, fornecedor, cliente, gramas, metros, comprimento, peso,
+            quantidade, stock_minimo, largura, m2, medida, data_atual, foto_path, campos_extra_json
+        ))
+
+        conn.commit()
+        conn.close()
+
+        if quantidade <= stock_minimo and cliente:
+            enviar_alerta_email("cliente@exemplo.com", referencia or categoria, quantidade)
+
+        st.success("Item adicionado com sucesso!")
+        st.rerun()
 
 elif pagina == "Listar/Remover":
-    # (código anterior mantido)
+    st.title("Lista de Itens")
+    if not df.empty:
+        edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+        if st.button("Salvar Alterações"):
+            conn = get_db_connection()
+            edited_df.to_sql("materiais", conn, if_exists="replace", index=False)
+            conn.close()
+            st.success("Alterações salvas!")
+            st.rerun()
+        id_remover = st.number_input("ID do item a remover", min_value=1, step=1)
+        if st.button("Remover Item"):
+            conn = get_db_connection()
+            c = conn.cursor()
+            c.execute("DELETE FROM materiais WHERE id = ?", (id_remover,))
+            conn.commit()
+            conn.close()
+            st.success("Item removido!")
+            st.rerun()
+    else:
+        st.info("Nenhum item cadastrado.")
 
 elif pagina == "Exportar Excel":
-    # (código anterior mantido)
+    st.title("Exportar para Excel")
+    if not df.empty:
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Stock')
+        output.seek(0)
+        st.download_button(
+            label="Baixar Excel",
+            data=output,
+            file_name=f"stock_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("Nada para exportar.")
 
-# ========================= NOVA PÁGINA: CALENDÁRIO & LEMBRETES =========================
 elif pagina == "Calendário & Lembretes":
     st.title("📅 Calendário e Lembretes")
 
@@ -206,7 +381,6 @@ elif pagina == "Calendário & Lembretes":
         else:
             st.info("Ainda não tens lembretes.")
 
-# ========================= ASSISTENTE IA =========================
 elif pagina == "🤖 Assistente IA":
     st.title("🤖 Assistente IA - Gestor de Stock")
     st.write("Pergunta qualquer coisa: previsões, sugestões, ajuda em tarefas, correção de problemas futuros...")
@@ -229,5 +403,3 @@ elif pagina == "🤖 Assistente IA":
                 st.markdown(resposta)
         
         st.session_state.messages.append({"role": "assistant", "content": resposta})
-
-# ========================= FIM =========================
