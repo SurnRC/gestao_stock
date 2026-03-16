@@ -6,7 +6,7 @@ import smtplib
 from email.mime.text import MIMEText
 import os
 import cv2
-from pyzbar.pyzbar import decode  # Descomenta apenas para usar webcam local
+# from pyzbar.pyzbar import decode  # Descomenta apenas para usar webcam local ou pyzbar
 import pytesseract
 from PIL import Image
 import io
@@ -18,21 +18,21 @@ import openai  # para Grok
 # CONFIGURAÇÕES GLOBAIS
 # ────────────────────────────────────────────────
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # ajuste se necessário
 
 EMAIL_REMETENTE = "seuemail@gmail.com"
-SENHA_APP = "sua-senha-de-app"
+SENHA_APP = "sua-senha-de-app"          # senha de aplicativo do Gmail
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-# Grok API (xAI) – guarda a chave real em st.secrets
+# Grok API (xAI) – guarda a chave real em st.secrets no Streamlit Cloud
 client = openai.OpenAI(
     api_key=st.secrets.get("XAI_API_KEY", "coloque_aqui_sua_chave"),
     base_url="https://api.x.ai/v1"
 )
 
 # ────────────────────────────────────────────────
-# CONEXÃO E INICIALIZAÇÃO DO BANCO
+# CONEXÃO E BANCO DE DADOS
 # ────────────────────────────────────────────────
 
 def get_db_connection():
@@ -234,7 +234,7 @@ elif pagina == "Adicionar/Editar":
             img = Image.open(io.BytesIO(foto_camera.getvalue()))
             img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-            # Leitura de barcode (descomenta quando tiveres pyzbar)
+            # Leitura de barcode (descomenta quando tiveres pyzbar instalado)
             # barcodes = decode(img_cv)
             # if barcodes:
             #     barcode_data = barcodes[0].data.decode('utf-8')
@@ -268,9 +268,7 @@ elif pagina == "Adicionar/Editar":
         # cap.release()
         # frame_placeholder.empty()
 
-    # ────────────────────────────────────────────────
-    # Botão Salvar – deve estar fora dos if/elif metodo, mas dentro da página
-    # ────────────────────────────────────────────────
+    # Botão Salvar Item – fora dos if/elif metodo
     if st.button("Salvar Item"):
         conn = get_db_connection()
         c = conn.cursor()
