@@ -3,6 +3,7 @@ pandas
 openpyxl
 Pillow
 pytesseract
-opencv-python-headless
-pyzbar
+opencv-python-headless   # ou opencv-python se for só local
+pyzbar                   # só se usares a opção 2 (leitura real)
 openai
+numpy
