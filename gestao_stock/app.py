@@ -6,33 +6,33 @@ import smtplib
 from email.mime.text import MIMEText
 import os
 import cv2
-# from pyzbar.pyzbar import decode  # Descomenta APENAS quando fores testar a webcam LOCAL
+from pyzbar.pyzbar import decode  # Descomenta apenas para usar webcam local
 import pytesseract
 from PIL import Image
 import io
 import numpy as np
 import json
-import openai  # para o Grok
+import openai  # para Grok
 
 # ────────────────────────────────────────────────
 # CONFIGURAÇÕES GLOBAIS
 # ────────────────────────────────────────────────
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # ajuste se necessário
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 EMAIL_REMETENTE = "seuemail@gmail.com"
-SENHA_APP = "sua-senha-de-app"          # senha de aplicativo do Gmail
+SENHA_APP = "sua-senha-de-app"
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-# Configuração Grok (xAI) - guarda a chave real em st.secrets
+# Grok API (xAI) – guarda a chave real em st.secrets
 client = openai.OpenAI(
     api_key=st.secrets.get("XAI_API_KEY", "coloque_aqui_sua_chave"),
     base_url="https://api.x.ai/v1"
 )
 
 # ────────────────────────────────────────────────
-# CONEXÃO E BANCO DE DADOS
+# CONEXÃO E INICIALIZAÇÃO DO BANCO
 # ────────────────────────────────────────────────
 
 def get_db_connection():
@@ -44,7 +44,7 @@ def init_db():
     conn = get_db_connection()
     c = conn.cursor()
     
-    # Tabela materiais (stock)
+    # Tabela stock
     c.execute('''
     CREATE TABLE IF NOT EXISTS materiais (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,7 +67,7 @@ def init_db():
     )
     ''')
     
-    # Tabela lembretes / tarefas
+    # Tabela lembretes
     c.execute('''
     CREATE TABLE IF NOT EXISTS lembretes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,15 +122,18 @@ def chamar_ia(pergunta, df):
     Dados atuais: {dados}
     Ajuda o utilizador em português com previsões, sugestões de compra, correção de problemas futuros e ajuda em tarefas.
     """
-    response = client.chat.completions.create(
-        model="grok-4",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": pergunta}
-        ],
-        temperature=0.7
-    )
-    return response.choices[0].message.content
+    try:
+        response = client.chat.completions.create(
+            model="grok-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": pergunta}
+            ],
+            temperature=0.7
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Erro ao chamar a IA: {str(e)}"
 
 # ────────────────────────────────────────────────
 # INTERFACE PRINCIPAL
@@ -166,7 +169,7 @@ if pagina == "Dashboard":
         st.subheader("Resumo por Categoria")
         st.bar_chart(df['categoria'].value_counts())
     
-    # Próximos lembretes no Dashboard
+    # Próximos lembretes
     conn = get_db_connection()
     lembretes_hoje = pd.read_sql_query(
         "SELECT * FROM lembretes WHERE data >= date('now') ORDER BY data, hora LIMIT 5", conn)
@@ -181,23 +184,27 @@ elif pagina == "Adicionar/Editar":
     metodo = st.radio("Como inserir?", [
         "Manual",
         "Foto + OCR",
-        "Câmera do browser (recomendado – online)",
+        "Câmera do browser (recomendado)",
         "Webcam em tempo real (só local)"
     ])
 
     uploaded_file = None
-    referencia = st.text_input("Referência")   # valor será preenchido automaticamente se lido
+    referencia = st.text_input("Referência")
 
-    # Campos existentes (mantém os teus)
     categoria = st.selectbox("Categoria", ["BOBINES", "PALETE", "COLA", "SOBRA", "FILME", "TACOS", "Outra"])
     fornecedor = st.text_input("Fornecedor") if categoria in ["BOBINES"] else ""
     cliente = st.text_input("Cliente") if categoria in ["COLA"] else ""
     gramas = st.number_input("Gramas", min_value=0.0, step=0.1) if categoria in ["BOBINES", "SOBRA"] else 0.0
-    # ... (mantém todos os outros campos que já tinhas)
+    metros = st.number_input("Metros", min_value=0.0, step=1.0) if categoria in ["BOBINES"] else 0.0
+    comprimento = st.number_input("Comprimento", min_value=0.0, step=1.0) if categoria in ["BOBINES"] else 0.0
+    peso = st.number_input("Peso", min_value=0.0, step=0.1)
+    quantidade = st.number_input("Quantidade / Stock Atual", min_value=0, step=1, value=1)
+    stock_minimo = st.number_input("Stock Mínimo (para alerta)", min_value=1, value=10)
+    largura = st.number_input("Largura", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
+    m2 = st.number_input("m²", min_value=0.0, step=1.0) if categoria in ["SOBRA"] else 0.0
+    medida = st.text_input("Medida (ex: 140/180)") if categoria in ["TACOS"] else ""
 
-    # ────────────────────────────────────────────────
-    # 1. Foto + OCR (já tinhas)
-    # ────────────────────────────────────────────────
+    # Foto + OCR
     if metodo == "Foto + OCR":
         uploaded_file = st.file_uploader("Tire ou envie foto da etiqueta", type=["jpg", "png"])
         if uploaded_file:
@@ -210,74 +217,36 @@ elif pagina == "Adicionar/Editar":
             texto_ocr = pytesseract.image_to_string(thresh, lang='por+eng')
             st.text_area("Texto detectado (OCR)", texto_ocr, height=150)
 
-            # Tentativa de extrair referência
             if "ref" in texto_ocr.lower():
                 ref_start = texto_ocr.lower().find("ref") + 3
                 ref = texto_ocr[ref_start:ref_start+15].strip()
                 referencia = st.text_input("Referência (do OCR)", value=ref)
 
-    # ────────────────────────────────────────────────
-    # 2. Câmera do browser – leitura de barcode (funciona online)
-    # ────────────────────────────────────────────────
-    elif metodo == "Câmera do browser (recomendado – online)":
-        st.write("Fotografe o código de barras com a câmera do telemóvel ou computador")
+    # Câmera do browser (funciona online)
+    elif metodo == "Câmera do browser (recomendado)":
+        st.write("Fotografe o código de barras ou etiqueta")
 
-        foto_camera = st.camera_input("Tire foto do código de barras")
+        foto_camera = st.camera_input("Tire foto")
 
         if foto_camera is not None:
             st.image(foto_camera, caption="Foto tirada", use_column_width=True)
 
-            # Converter para formato que pyzbar entende
             img = Image.open(io.BytesIO(foto_camera.getvalue()))
-            img_array = np.array(img)
+            img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-            # Aqui usamos pyzbar (descomenta o import lá em cima se quiseres usar)
-            # barcodes = decode(img_array)
-            # if barcodes:
-            #     barcode_data = barcodes[0].data.decode('utf-8')
-            #     st.success(f"Código lido: **{barcode_data}**")
-            #     referencia = st.text_input("Referência detectada", value=barcode_data)
-            # else:
-            #     st.warning("Nenhum código de barras encontrado na foto. Tente novamente.")
+            #Leitura de barcode (descomenta quando tiveres pyzbar)
+            barcodes = decode(img_cv)
+            if barcodes:
+                barcode_data = barcodes[0].data.decode('utf-8')
+                 st.success(f"Código lido: {barcode_data}")
+                referencia = st.text_input("Referência detectada", value=barcode_data)
+            else:
+                   st.warning("Nenhum código encontrado na foto.")
 
-            st.info("Leitura automática de barcode ativada quando tiveres pyzbar instalado e import descomentado.")
-
-    # ────────────────────────────────────────────────
-    # 3. Webcam em tempo real – OpenCV + pyzbar (só local)
-    # ────────────────────────────────────────────────
+    #Webcam local (comentada)
     elif metodo == "Webcam em tempo real (só local)":
-        st.warning("Esta opção **só funciona localmente** (no computador com webcam). Não funciona no deploy online.")
+    
 
-        st.write("Aponte a câmera para o código de barras...")
-
-        cap = cv2.VideoCapture(0)
-        frame_placeholder = st.empty()
-        stop_button = st.button("Parar leitura")
-
-        while cap.isOpened() and not stop_button:
-            ret, frame = cap.read()
-            if not ret:
-                st.error("Não foi possível abrir a câmera.")
-                break
-
-            # Mostrar frame
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
-
-            # Ler barcode (precisa pyzbar)
-            # barcodes = decode(frame)
-            # if barcodes:
-            #     barcode_data = barcodes[0].data.decode('utf-8')
-            #     st.success(f"Código lido: {barcode_data}")
-            #     referencia = st.text_input("Referência (do barcode)", value=barcode_data)
-            #     break  # ou continua se quiseres ler vários
-
-        cap.release()
-        frame_placeholder.empty()
-
-    # ────────────────────────────────────────────────
-    # Botão Salvar (igual ao que já tinhas)
-    # ────────────────────────────────────────────────
     if st.button("Salvar Item"):
         conn = get_db_connection()
         c = conn.cursor()
@@ -310,6 +279,7 @@ elif pagina == "Adicionar/Editar":
 
         st.success("Item adicionado com sucesso!")
         st.rerun()
+
 elif pagina == "Listar/Remover":
     st.title("Lista de Itens")
     if not df.empty:
@@ -375,7 +345,7 @@ elif pagina == "Calendário & Lembretes":
             ''', (titulo, data, str(hora) if hora else None, descricao, prioridade, categoria_lembrete))
             conn.commit()
             conn.close()
-            st.success("Lembrete guardado com sucesso!")
+            st.success("Lembrete guardado!")
             st.rerun()
 
     with tab2:
@@ -392,7 +362,7 @@ elif pagina == "Calendário & Lembretes":
 
 elif pagina == "🤖 Assistente IA":
     st.title("🤖 Assistente IA - Gestor de Stock")
-    st.write("Pergunta qualquer coisa: previsões, sugestões, ajuda em tarefas, correção de problemas futuros...")
+    st.write("Pergunta qualquer coisa sobre stock, tarefas, previsões...")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
