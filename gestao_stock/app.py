@@ -6,7 +6,7 @@ import smtplib
 from email.mime.text import MIMEText
 import os
 import cv2
-from pyzbar.pyzbar import decode   # comentado porque precisa de libzbar0 no deploy → descomenta só localmente
+#from pyzbar.pyzbar import decode   # comentado porque precisa de libzbar0 no deploy → descomenta só localmente
 import pytesseract
 from PIL import Image
 import io
